@@ -93,6 +93,16 @@ sudo -u wallpilot \
   /opt/wallpilot/venv/bin/wallpilot bootstrap
 ```
 
+运行只读环境诊断，检查发行版、Python、systemd、防火墙后端、服务账户、
+文件权限、root 代理和 SSH 隧道条件：
+
+```bash
+sudo WALLPILOT_STATE_DIR=/var/lib/wallpilot \
+  /opt/wallpilot/venv/bin/wallpilot doctor
+```
+
+自动化环境可增加 `--json`；诊断结果不会显示随机管理路径、代理密钥或其他秘密。
+
 在自己的电脑建立SSH隧道：
 
 ```bash
@@ -145,6 +155,7 @@ sudo WALLPILOT_STATE_DIR=/var/lib/wallpilot \
 ```text
 wallpilot bootstrap
 wallpilot status [--json]
+wallpilot doctor [--json]
 wallpilot serve
 wallpilot rotate-path
 wallpilot emergency-start

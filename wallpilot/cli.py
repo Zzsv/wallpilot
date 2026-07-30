@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from .config import Settings
 from .control import ControlPlane
+from .doctor import collect_doctor_report, render_doctor_report
 from .storage import Store
 
 
@@ -68,6 +69,15 @@ def command_status(as_json: bool) -> int:
     return 0
 
 
+def command_doctor(as_json: bool) -> int:
+    report = collect_doctor_report()
+    if as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(render_doctor_report(report))
+    return 0 if report["healthy"] else 1
+
+
 def command_serve() -> int:
     settings = Settings()
     import uvicorn
@@ -112,6 +122,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("bootstrap", help="显示首次初始化信息")
     status_parser = sub.add_parser("status", help="显示服务器和防火墙状态")
     status_parser.add_argument("--json", action="store_true")
+    doctor_parser = sub.add_parser("doctor", help="检查安装、安全配置和访问条件")
+    doctor_parser.add_argument("--json", action="store_true")
     sub.add_parser("emergency-start", help="紧急启动防火墙")
     sub.add_parser("emergency-rollback", help="回滚所有待确认操作")
     sub.add_parser("rotate-path", help="轮换随机管理路径")
@@ -127,6 +139,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_bootstrap()
         if args.command == "status":
             return command_status(args.json)
+        if args.command == "doctor":
+            return command_doctor(args.json)
         if args.command == "emergency-start":
             return command_emergency_start()
         if args.command == "emergency-rollback":
