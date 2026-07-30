@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from collections import deque
 import hashlib
 import hmac
 import json
@@ -21,7 +22,7 @@ except ImportError:  # pragma: no cover - agent only runs on Linux
 
 from .config import Settings
 from .firewall import adapter_for, detect_firewall
-from .models import FirewallRule, ServiceAction
+from .models import FirewallObject, FirewallRule, ServiceAction
 from .runner import CommandRunner
 from .security import secure_file_mode
 from .system_info import collect_profile
@@ -32,8 +33,12 @@ ALLOWED_METHODS = {
     "firewall_status",
     "rules",
     "snapshot",
+    "logs",
     "apply_rule",
     "service_action",
+    "objects",
+    "get_object",
+    "apply_object",
 }
 
 
@@ -81,13 +86,17 @@ class AgentOperations:
         self.runner = CommandRunner()
         self.profile = collect_profile()
         self.detection = detect_firewall(self.profile, self.runner)
-        self.adapter = adapter_for(self.detection, self.runner)
+        self.adapter = adapter_for(
+            self.detection, self.runner, systemd=self.profile.systemd
+        )
 
     def refresh(self) -> None:
         detection = detect_firewall(self.profile, self.runner)
         if detection.backend != self.detection.backend or detection.conflict != self.detection.conflict:
             self.detection = detection
-            self.adapter = adapter_for(detection, self.runner)
+            self.adapter = adapter_for(
+                detection, self.runner, systemd=self.profile.systemd
+            )
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
         if method not in ALLOWED_METHODS:
@@ -103,6 +112,9 @@ class AgentOperations:
                 "firewall": self.adapter.status().model_dump(mode="json"),
                 "rules": [rule.model_dump(mode="json") for rule in self.adapter.list_rules()],
             }
+        if method == "logs":
+            limit = min(max(int(params.get("limit", 200)), 1), 500)
+            return self.adapter.rejection_logs(limit)
         if method == "apply_rule":
             operation = str(params.get("operation", ""))
             if operation not in {"add", "delete", "restore"}:
@@ -120,6 +132,23 @@ class AgentOperations:
             action = ServiceAction(str(params.get("action", "")))
             self.adapter.service_action(action)
             return {"status": "ok"}
+        if method == "objects":
+            return self.adapter.list_objects()
+        if method == "get_object":
+            object_type = str(params.get("object_type", ""))
+            name = str(params.get("name", ""))
+            return self.adapter.get_object(object_type, name).model_dump(mode="json")
+        if method == "apply_object":
+            operation = str(params.get("operation", ""))
+            if operation not in {"add", "delete", "restore", "update"}:
+                raise ValueError("unsupported object operation")
+            item = FirewallObject.model_validate(params.get("object"))
+            if item.backend != self.adapter.backend:
+                raise ValueError("object backend mismatch")
+            before_raw = params.get("before")
+            before = FirewallObject.model_validate(before_raw) if before_raw else None
+            self.adapter.apply_object(operation, item, before=before)
+            return {"status": "ok"}
         raise ValueError("unreachable")
 
 
@@ -133,12 +162,27 @@ class AgentServer:
         self.socket_path = socket_path
         self.secret = secret
         self.operations = operations or AgentOperations()
+        self._nonce_order: deque[str] = deque()
+        self._seen_nonces: set[str] = set()
         self.allowed_uids = {0}
         if pwd is not None:
             try:
                 self.allowed_uids.add(pwd.getpwnam("wallpilot").pw_uid)
             except KeyError:
                 pass
+
+    def _accept_nonce(self, nonce: str) -> bool:
+        if (
+            len(nonce) != 32
+            or any(ch not in "0123456789abcdef" for ch in nonce)
+            or nonce in self._seen_nonces
+        ):
+            return False
+        while len(self._nonce_order) >= 4096:
+            self._seen_nonces.discard(self._nonce_order.popleft())
+        self._nonce_order.append(nonce)
+        self._seen_nonces.add(nonce)
+        return True
 
     def _peer_allowed(self, writer: asyncio.StreamWriter) -> bool:
         if os.name != "posix":
@@ -156,6 +200,7 @@ class AgentServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         response: dict[str, Any]
+        request_id: Any = None
         try:
             if not self._peer_allowed(writer):
                 raise PermissionError("unix peer is not allowed")
@@ -163,17 +208,20 @@ class AgentServer:
             if not raw or len(raw) > MAX_REQUEST_BYTES:
                 raise ValueError("invalid agent request size")
             document = json.loads(raw)
+            request_id = document.get("id")
             if not verify_request(document, self.secret):
                 raise PermissionError("agent request signature mismatch")
+            if not self._accept_nonce(str(document.get("nonce", ""))):
+                raise PermissionError("agent request nonce was replayed or invalid")
             method = str(document.get("method", ""))
             params = document.get("params", {})
             if not isinstance(params, dict):
                 raise ValueError("agent params must be an object")
             result = await asyncio.to_thread(self.operations.dispatch, method, params)
-            response = {"id": document.get("id"), "ok": True, "result": result}
+            response = {"id": request_id, "ok": True, "result": result}
         except Exception as exc:
             response = {
-                "id": None,
+                "id": request_id,
                 "ok": False,
                 "error": type(exc).__name__,
                 "detail": str(exc),

@@ -9,6 +9,9 @@
 - `GET /system/metrics`
 - `GET /firewall/status`
 - `GET /firewall/rules`
+- `GET /firewall/objects`
+- `GET /firewall/objects/{type}/{name}`
+- `GET /firewall/logs`
 - `GET /recycle-bin`
 - `GET /backups`
 - `GET /audit`
@@ -19,14 +22,18 @@
 
 - `POST /firewall/service-action`
 - `POST /drafts`
+- `POST /batch-delete`
+- `POST /import`
 - `POST /drafts/{id}/confirm`
 - `POST /apply-sessions/{id}/confirm`
 - `POST /apply-sessions/{id}/rollback`
 - `POST /recycle-bin/{id}/restore`
+- `POST /recycle-bin/batches/{batch_id}/restore`
 - `POST /recycle-bin/{id}/purge`
+- `POST /recycle-bin/batches/{batch_id}/purge`
 - `POST /backups`
 
-写规则的固定状态机为：
+规则、高级对象和批量操作使用同一固定状态机：
 
 ```text
 pending draft → applying runtime → pending confirmation
@@ -36,3 +43,5 @@ pending draft → applying runtime → pending confirmation
 
 服务关闭和禁用也会创建待确认应用会话。
 
+`GET /export` 返回 `wallpilot-config` 版本1文档，可原样提交到 `POST /import`。
+导入会跳过内容完全相同的项目，并拒绝同名但内容不同的高级对象。

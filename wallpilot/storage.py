@@ -36,7 +36,12 @@ class Store:
         self.settings = settings
         self.settings.ensure_directories()
         self.passwords = PasswordHasher()
-        self._initialize()
+        try:
+            self._initialize()
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError(
+                "WallPilot 数据库无法读取，已停止启动以避免覆盖恢复数据"
+            ) from exc
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -76,6 +81,10 @@ class Store:
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     source TEXT NOT NULL,
                     attempted_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS recovery_codes (
+                    code_hash TEXT PRIMARY KEY,
+                    used_at TEXT
                 );
                 CREATE TABLE IF NOT EXISTS drafts (
                     id TEXT PRIMARY KEY,
@@ -118,6 +127,7 @@ class Store:
                     deleted_by TEXT NOT NULL,
                     source TEXT NOT NULL,
                     reason TEXT NOT NULL,
+                    config_hash TEXT NOT NULL,
                     checksum TEXT NOT NULL,
                     status TEXT NOT NULL
                 );
@@ -140,13 +150,33 @@ class Store:
                     collected_at TEXT PRIMARY KEY,
                     payload TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS temporary_rules (
+                    id TEXT PRIMARY KEY,
+                    backend TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
+            recycle_columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(recycle_bin)").fetchall()
+            }
+            if "config_hash" not in recycle_columns:
+                conn.execute(
+                    "ALTER TABLE recycle_bin "
+                    "ADD COLUMN config_hash TEXT NOT NULL DEFAULT ''"
+                )
             if conn.execute("SELECT 1 FROM settings WHERE key='state_secret'").fetchone() is None:
                 conn.execute(
                     "INSERT INTO settings(key,value) VALUES('state_secret',?)",
                     (secrets.token_hex(32),),
                 )
+            quick_check = conn.execute("PRAGMA quick_check").fetchone()
+            if not quick_check or str(quick_check[0]).lower() != "ok":
+                raise sqlite3.DatabaseError("SQLite quick_check failed")
         secure_file_mode(self.settings.database_path)
 
     def _setting(self, key: str) -> str | None:
@@ -200,7 +230,7 @@ class Store:
             "expires": self._setting("bootstrap_expires") or "",
         }
 
-    def create_admin(self, token: str, password: str, totp: str) -> None:
+    def create_admin(self, token: str, password: str, totp: str) -> list[str]:
         if self.is_initialized():
             raise ValueError("管理员已经初始化")
         expected = self._setting("bootstrap_hash") or ""
@@ -216,6 +246,13 @@ class Store:
         if not verify_totp(secret, totp):
             raise ValueError("动态验证码无效")
         password_hash = self.passwords.hash(password)
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        recovery_codes = [
+            "".join(secrets.choice(alphabet) for _ in range(4))
+            + "-"
+            + "".join(secrets.choice(alphabet) for _ in range(4))
+            for _ in range(8)
+        ]
         with self.connect() as conn:
             conn.execute(
                 "INSERT INTO admin(id,username,password_hash,totp_secret,created_at) "
@@ -226,11 +263,16 @@ class Store:
                 "DELETE FROM settings WHERE key IN "
                 "('bootstrap_hash','bootstrap_totp','bootstrap_expires')"
             )
+            conn.executemany(
+                "INSERT INTO recovery_codes(code_hash,used_at) VALUES(?,NULL)",
+                [(token_hash(code),) for code in recovery_codes],
+            )
         try:
             self.settings.bootstrap_path.unlink()
         except FileNotFoundError:
             pass
         self.audit("auth.setup", "admin", "local", {"result": "success"})
+        return recovery_codes
 
     def authenticate(
         self, password: str, totp: str, source: str
@@ -240,11 +282,30 @@ class Store:
             row = conn.execute(
                 "SELECT password_hash,totp_secret FROM admin WHERE id=1"
             ).fetchone()
-        valid = bool(
-            row
-            and self.passwords.verify(str(row["password_hash"]), password)
-            and verify_totp(str(row["totp_secret"]), totp)
+        password_valid = bool(
+            row and self.passwords.verify(str(row["password_hash"]), password)
         )
+        second_factor_valid = bool(
+            row and verify_totp(str(row["totp_secret"]), totp)
+        )
+        used_recovery = False
+        if password_valid and not second_factor_valid:
+            normalized = totp.strip().upper()
+            if len(normalized) <= 32:
+                digest = token_hash(normalized)
+                with self.connect() as conn:
+                    code = conn.execute(
+                        "SELECT used_at FROM recovery_codes WHERE code_hash=?",
+                        (digest,),
+                    ).fetchone()
+                    if code and code["used_at"] is None:
+                        updated = conn.execute(
+                            "UPDATE recovery_codes SET used_at=? "
+                            "WHERE code_hash=? AND used_at IS NULL",
+                            (_now().isoformat(), digest),
+                        )
+                        used_recovery = updated.rowcount == 1
+        valid = password_valid and (second_factor_valid or used_recovery)
         if not valid:
             with self.connect() as conn:
                 conn.execute(
@@ -262,7 +323,12 @@ class Store:
                 "VALUES(?,?,?,?,?)",
                 (session.digest, session.csrf, now.isoformat(), now.isoformat(), absolute.isoformat()),
             )
-        self.audit("auth.login", "admin", source, {})
+        self.audit(
+            "auth.login",
+            "admin",
+            source,
+            {"recovery_code": used_recovery},
+        )
         return session.raw, session.csrf
 
     def _check_rate_limit(self, source: str) -> None:
@@ -468,11 +534,18 @@ class Store:
             "deleted_by": "admin",
             "source": source,
             "reason": reason,
+            "config_hash": hashlib.sha256(
+                _json(payload).encode("utf-8")
+            ).hexdigest(),
         }
         checksum = self._checksum(document)
         with self.connect() as conn:
             conn.execute(
-                "INSERT INTO recycle_bin VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO recycle_bin("
+                "id,batch_id,backend,system_version,object_type,object_name,"
+                "fingerprint,payload,dependencies,runtime_before,permanent_before,"
+                "deleted_at,deleted_by,source,reason,config_hash,checksum,status"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     recycle_id,
                     batch_id,
@@ -489,6 +562,7 @@ class Store:
                     "admin",
                     source,
                     reason,
+                    document["config_hash"],
                     checksum,
                     "deleted",
                 ),
@@ -521,6 +595,18 @@ class Store:
         item = self._recycle_document(row)
         item["integrity_ok"] = self._verify_recycle_checksum(item)
         return item
+
+    def list_recycle_batch(self, batch_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM recycle_bin "
+                "WHERE batch_id=? AND status='deleted' ORDER BY deleted_at",
+                (batch_id,),
+            ).fetchall()
+        items = [self._recycle_document(row) for row in rows]
+        for item in items:
+            item["integrity_ok"] = self._verify_recycle_checksum(item)
+        return items
 
     def mark_recycle_restored(self, recycle_id: str) -> None:
         with self.connect() as conn:
@@ -595,6 +681,43 @@ class Store:
             ).fetchall()
         return [json.loads(str(row["payload"])) for row in rows]
 
+    def schedule_temporary_rule(
+        self, rule_id: str, backend: str, payload: dict[str, Any], expires_at: datetime
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO temporary_rules VALUES(?,?,?,?,?,?)",
+                (
+                    rule_id,
+                    backend,
+                    _json(payload),
+                    expires_at.isoformat(),
+                    "active",
+                    _now().isoformat(),
+                ),
+            )
+        self.audit(
+            "rule.expiration_scheduled",
+            "wallpilot",
+            "local",
+            {"rule": rule_id, "expires_at": expires_at.isoformat()},
+        )
+
+    def due_temporary_rules(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM temporary_rules "
+                "WHERE status='active' AND expires_at<=? ORDER BY expires_at",
+                (_now().isoformat(),),
+            ).fetchall()
+        return [self._row_document(row, json_fields={"payload"}) for row in rows]
+
+    def set_temporary_rule_status(self, rule_id: str, status: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE temporary_rules SET status=? WHERE id=?", (status, rule_id)
+            )
+
     def _checksum(self, document: Any) -> str:
         secret = bytes.fromhex(self._setting("state_secret") or "")
         return hmac.new(secret, _json(document).encode("utf-8"), hashlib.sha256).hexdigest()
@@ -618,6 +741,7 @@ class Store:
                 "deleted_by",
                 "source",
                 "reason",
+                *(() if not item.get("config_hash") else ("config_hash",)),
             )
         }
         return hmac.compare_digest(str(item["checksum"]), self._checksum(document))

@@ -33,9 +33,10 @@
         <label>身份验证器动态码<input name="totp" inputmode="numeric" autocomplete="one-time-code" required></label>
         <button class="primary" type="submit">完成安全初始化</button>
       </form>
+      <div id="recoveryCodes" class="recovery-codes hidden"></div>
       <form id="loginForm" class="stack hidden">
         <label>管理员密码<input name="password" type="password" autocomplete="current-password" required></label>
-        <label>动态验证码<input name="totp" inputmode="numeric" autocomplete="one-time-code" required></label>
+        <label>动态验证码或恢复码<input name="totp" autocomplete="one-time-code" required></label>
         <button class="primary" type="submit">进入控制台</button>
       </form>
       <p id="authError" class="error"></p>
@@ -80,6 +81,26 @@
             <div id="serviceList" class="service-list"></div>
           </article>
         </div>
+        <div class="two-column">
+          <article class="panel">
+            <header><div><span class="eyebrow">NETWORK</span><h3>网卡与默认路由</h3></div></header>
+            <div id="networkTable" class="table-wrap"></div>
+          </article>
+          <article class="panel">
+            <header><div><span class="eyebrow">STORAGE</span><h3>磁盘与 inode</h3></div></header>
+            <div id="diskTable" class="table-wrap"></div>
+          </article>
+        </div>
+        <div class="two-column">
+          <article class="panel">
+            <header><div><span class="eyebrow">CONNECTIONS</span><h3>活动连接与 SSH 会话</h3></div></header>
+            <div id="connectionTable" class="table-wrap"></div>
+          </article>
+          <article class="panel">
+            <header><div><span class="eyebrow">CONTAINERS</span><h3>容器与端口映射</h3></div></header>
+            <div id="containerTable" class="table-wrap"></div>
+          </article>
+        </div>
       </section>
 
       <section id="firewall" class="page">
@@ -106,21 +127,101 @@
           <header><div><span class="eyebrow">CAPABILITIES</span><h3>后端能力</h3></div></header>
           <div id="capabilityList" class="tag-list"></div>
         </article>
+        <article class="panel object-panel">
+          <header>
+            <div><span class="eyebrow">ADVANCED OBJECTS</span><h3>区域、策略、服务与IP集合</h3></div>
+            <div class="row-actions">
+              <button id="batchDeleteObjectButton" class="danger-outline">删除已选</button>
+              <button id="openObjectForm" class="primary">＋ 新建高级对象</button>
+            </div>
+          </header>
+          <form id="objectForm" class="object-form hidden">
+            <input type="hidden" name="mode" value="add">
+            <label>对象类型
+              <select name="object_type">
+                <option value="zone">区域 Zone</option>
+                <option value="policy">策略 Policy</option>
+                <option value="service">自定义服务</option>
+                <option value="ipset">IP 集合</option>
+              </select>
+            </label>
+            <label>名称<input name="name" placeholder="例如 trusted-office" required></label>
+            <label class="object-field" data-types="zone policy">目标
+              <select name="target"><option>DEFAULT</option><option>ACCEPT</option><option>DROP</option><option>REJECT</option><option>CONTINUE</option></select>
+            </label>
+            <label class="object-field" data-types="zone policy">服务列表<input name="services" placeholder="ssh, https"></label>
+            <label class="object-field" data-types="zone policy service">端口列表<input name="ports" placeholder="443/tcp, 53/udp"></label>
+            <label class="object-field" data-types="zone policy service">源端口<input name="source_ports" placeholder="1024-65535/tcp"></label>
+            <label class="object-field" data-types="zone">来源网段<input name="sources" placeholder="10.0.0.0/8, 2001:db8::/32"></label>
+            <label class="object-field" data-types="zone">绑定网卡<input name="interfaces" placeholder="eth0, enp1s0"></label>
+            <label class="object-field" data-types="policy">入口区域<input name="ingress_zones" placeholder="internal, HOST"></label>
+            <label class="object-field" data-types="policy">出口区域<input name="egress_zones" placeholder="external, ANY"></label>
+            <label class="object-field" data-types="zone policy service">协议<input name="protocols" placeholder="icmp, esp"></label>
+            <label class="object-field" data-types="zone policy">ICMP 阻止类型<input name="icmp_blocks" placeholder="echo-request, redirect"></label>
+            <label class="object-field wide" data-types="zone policy">富规则<textarea name="rich_rules" placeholder="每行一条，以 rule 开头"></textarea></label>
+            <label class="object-field wide" data-types="zone policy">端口转发<textarea name="forward_ports" placeholder="每行：8080/tcp &gt; 80 @ 192.0.2.10"></textarea></label>
+            <label class="object-field" data-types="zone">入口优先级<input name="ingress_priority" type="number" min="-32768" max="32767" value="0"></label>
+            <label class="object-field" data-types="zone">出口优先级<input name="egress_priority" type="number" min="-32768" max="32767" value="0"></label>
+            <label class="object-field" data-types="policy">策略优先级<input name="priority" type="number" min="-32768" max="32767" value="-1"></label>
+            <label class="object-field" data-types="service ipset">显示名称<input name="short" placeholder="My Application"></label>
+            <label class="object-field" data-types="service ipset">说明<input name="description" placeholder="对象用途"></label>
+            <label class="object-field" data-types="service">连接跟踪模块<input name="modules" placeholder="nf_conntrack_ftp"></label>
+            <label class="object-field" data-types="service">IPv4 目标<input name="destination_ipv4" placeholder="192.0.2.0/24"></label>
+            <label class="object-field" data-types="service">IPv6 目标<input name="destination_ipv6" placeholder="2001:db8::/32"></label>
+            <label class="object-field" data-types="ipset">集合类型
+              <select name="ipset_type"><option>hash:ip</option><option>hash:net</option><option>hash:mac</option><option>hash:ip,port</option><option>hash:net,port</option></select>
+            </label>
+            <label class="object-field" data-types="ipset">地址族
+              <select name="family"><option>inet</option><option>inet6</option></select>
+            </label>
+            <label class="object-field" data-types="ipset">哈希大小<input name="hashsize" type="number" min="64" max="1048576" value="1024"></label>
+            <label class="object-field" data-types="ipset">最大成员数<input name="maxelem" type="number" min="1" max="10000000" value="65536"></label>
+            <label class="object-field" data-types="ipset">成员超时（秒）<input name="timeout" type="number" min="0" max="31536000" value="0"></label>
+            <label class="object-field wide" data-types="ipset">集合成员<textarea name="entries" placeholder="每行一个IP、网段或符合类型的条目"></textarea></label>
+            <label class="object-field checkbox" data-types="zone policy"><input name="masquerade" type="checkbox"> 启用 masquerade</label>
+            <label class="object-field checkbox" data-types="zone"><input name="forward" type="checkbox"> 允许区域内转发</label>
+            <label class="object-field checkbox" data-types="zone policy"><input name="icmp_block_inversion" type="checkbox"> 反转 ICMP 阻止列表</label>
+            <label class="object-field checkbox" data-types="policy"><input name="disabled" type="checkbox"> 暂停此策略</label>
+            <div class="form-actions wide"><button type="button" id="cancelObjectForm" class="ghost">取消</button><button type="submit" class="primary">预览并应用</button></div>
+          </form>
+          <div id="objectsTable" class="table-wrap"></div>
+        </article>
+        <article class="panel">
+          <header>
+            <div><span class="eyebrow">DENIED TRAFFIC</span><h3>最近一小时拒绝日志</h3></div>
+            <input id="logSearch" class="search" placeholder="筛选IP、端口或动作">
+          </header>
+          <div id="firewallLogs" class="log-view"></div>
+        </article>
       </section>
 
       <section id="rules" class="page">
         <div class="page-heading">
           <div><span class="eyebrow">RULES</span><h2>规则管理</h2></div>
-          <button id="openRuleForm" class="primary">＋ 新建规则</button>
+          <div class="row-actions">
+            <button id="batchDeleteButton" class="danger-outline">删除已选</button>
+            <button id="importButton">导入 JSON</button>
+            <button id="ruleExportButton">导出 JSON</button>
+            <button id="openRuleForm" class="primary">＋ 新建规则</button>
+            <input id="importFile" class="hidden" type="file" accept="application/json,.json">
+          </div>
         </div>
         <article id="ruleFormPanel" class="panel hidden">
           <header><div><span class="eyebrow">GUIDED RULE</span><h3>小白规则向导</h3></div></header>
           <form id="ruleForm" class="rule-form">
             <label>动作<select name="action"><option value="allow">允许</option><option value="deny">阻止</option><option value="reject">拒绝</option><option value="limit">限速</option></select></label>
-            <label>端口<input name="port" placeholder="例如 443 或 8000-8100" required></label>
+            <label>方向<select name="direction"><option value="in">入站</option><option value="out">出站</option><option value="route">路由转发</option></select></label>
+            <label>端口<input name="port" placeholder="例如 443 或 8000-8100"></label>
+            <label>服务预设<input name="service" placeholder="例如 ssh；与端口二选一"></label>
             <label>协议<select name="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
             <label>来源网段<input name="source" placeholder="留空代表任意来源"></label>
+            <label>目标网段<input name="destination" placeholder="留空代表任意目标"></label>
+            <label class="ufw-only">入口网卡<input name="interface_in" placeholder="例如 eth0"></label>
+            <label class="ufw-only">出口网卡<input name="interface_out" placeholder="路由/出站时可用"></label>
             <label>区域<input name="zone" placeholder="留空使用默认区域"></label>
+            <label>地址族<select name="family"><option value="any">IPv4 + IPv6</option><option value="ipv4">仅 IPv4</option><option value="ipv6">仅 IPv6</option></select></label>
+            <label class="ufw-only">UFW 规则日志<select name="log"><option value="off">关闭</option><option value="log">记录</option><option value="log-all">记录全部</option></select></label>
+            <label>临时有效期（秒）<input name="temporary_seconds" type="number" min="0" max="604800" value="0"></label>
             <label class="wide">备注<input name="comment" placeholder="为什么需要这条规则"></label>
             <div class="form-actions wide"><button type="button" id="cancelRuleForm" class="ghost">取消</button><button type="submit" class="primary">预览并应用</button></div>
           </form>
@@ -160,4 +261,3 @@
   <script src="__WALLPILOT_BASE__/static/app.js" defer></script>
 </body>
 </html>
-

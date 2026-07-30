@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from wallpilot.agent import sign_request, verify_request
+from pathlib import Path
+
+from wallpilot.agent import AgentServer, sign_request, verify_request
 
 
 def test_agent_request_signature_detects_tampering() -> None:
@@ -16,3 +18,14 @@ def test_agent_request_signature_detects_tampering() -> None:
     request["params"]["action"] = "stop"
     assert not verify_request(request, secret)
 
+
+def test_agent_nonce_cannot_be_replayed(tmp_path: Path) -> None:
+    server = AgentServer(
+        tmp_path / "agent.sock",
+        bytes.fromhex("22" * 32),
+        operations=object(),  # type: ignore[arg-type]
+    )
+    nonce = "ab" * 16
+    assert server._accept_nonce(nonce)
+    assert not server._accept_nonce(nonce)
+    assert not server._accept_nonce("../not-a-valid-nonce")

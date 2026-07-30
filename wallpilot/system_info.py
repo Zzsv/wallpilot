@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import ipaddress
 import os
 import pathlib
 import platform
@@ -248,3 +250,173 @@ def collect_containers(runner: CommandRunner) -> list[dict[str, str]]:
             )
     return rows
 
+
+def collect_network_interfaces(runner: CommandRunner) -> list[dict[str, object]]:
+    if not runner.exists("ip"):
+        return []
+    result = runner.run(["ip", "-j", "address", "show"])
+    if not result.ok:
+        return []
+    try:
+        document = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+    rows: list[dict[str, object]] = []
+    for item in document if isinstance(document, list) else []:
+        addresses = []
+        for address in item.get("addr_info", []):
+            local = address.get("local")
+            prefix = address.get("prefixlen")
+            if local is not None and prefix is not None:
+                addresses.append(f"{local}/{prefix}")
+        rows.append(
+            {
+                "name": str(item.get("ifname", "")),
+                "state": str(item.get("operstate", "UNKNOWN")).lower(),
+                "mtu": int(item.get("mtu", 0) or 0),
+                "addresses": addresses,
+            }
+        )
+    return rows
+
+
+def collect_default_routes(runner: CommandRunner) -> list[dict[str, object]]:
+    if not runner.exists("ip"):
+        return []
+    result = runner.run(["ip", "-j", "route", "show", "default"])
+    if not result.ok:
+        return []
+    try:
+        document = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+    return [
+        {
+            "gateway": str(item.get("gateway", "")),
+            "device": str(item.get("dev", "")),
+            "metric": int(item.get("metric", 0) or 0),
+            "protocol": str(item.get("protocol", "")),
+        }
+        for item in document
+        if isinstance(item, dict)
+    ]
+
+
+def collect_dns_servers(
+    path: pathlib.Path = pathlib.Path("/etc/resolv.conf"),
+) -> list[str]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    servers: list[str] = []
+    for raw in text.splitlines():
+        fields = raw.split()
+        if len(fields) != 2 or fields[0] != "nameserver":
+            continue
+        try:
+            servers.append(str(ipaddress.ip_address(fields[1])))
+        except ValueError:
+            continue
+    return servers
+
+
+def collect_connections(runner: CommandRunner) -> list[dict[str, str]]:
+    if not runner.exists("ss"):
+        return []
+    result = runner.run(["ss", "-H", "-ntup", "state", "established"])
+    if not result.ok:
+        return []
+    rows: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 6:
+            continue
+        rows.append(
+            {
+                "protocol": fields[0],
+                "local": fields[4],
+                "remote": fields[5],
+                "process": " ".join(fields[6:])[:300],
+            }
+        )
+    return rows
+
+
+def collect_ssh_sessions(runner: CommandRunner) -> list[dict[str, str]]:
+    if not runner.exists("who"):
+        return []
+    result = runner.run(["who"])
+    if not result.ok:
+        return []
+    rows: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        rows.append(
+            {
+                "user": fields[0],
+                "terminal": fields[1],
+                "since": " ".join(fields[2:4]),
+                "source": " ".join(fields[4:]).strip("()"),
+            }
+        )
+    return rows
+
+
+def collect_security_modules(runner: CommandRunner) -> dict[str, str]:
+    modules: dict[str, str] = {}
+    if runner.exists("getenforce"):
+        result = runner.run(["getenforce"])
+        if result.ok and result.stdout.strip():
+            modules["SELinux"] = result.stdout.strip()
+    if runner.exists("aa-status"):
+        result = runner.run(["aa-status", "--enabled"], allowed_returncodes=(0, 1))
+        modules["AppArmor"] = "enabled" if result.returncode == 0 else "disabled"
+    return modules
+
+
+def reboot_required(
+    path: pathlib.Path = pathlib.Path("/var/run/reboot-required"),
+) -> bool:
+    return path.exists()
+
+
+def collect_security_update_cache() -> dict[str, str]:
+    candidates = (
+        (
+            "apt",
+            pathlib.Path("/var/lib/apt/lists"),
+            pathlib.Path("/var/lib/update-notifier/updates-available"),
+        ),
+        ("dnf", pathlib.Path("/var/cache/dnf"), None),
+        ("zypp", pathlib.Path("/var/cache/zypp"), None),
+        ("pacman", pathlib.Path("/var/lib/pacman/sync"), None),
+    )
+    for source, directory, summary_path in candidates:
+        if not directory.exists():
+            continue
+        try:
+            modified = max(
+                (path.stat().st_mtime for path in directory.iterdir()),
+                default=directory.stat().st_mtime,
+            )
+            document = {
+                "source": source,
+                "last_cache_update": datetime.fromtimestamp(
+                    modified, UTC
+                ).isoformat(),
+            }
+            if summary_path and summary_path.exists():
+                summary = " ".join(
+                    summary_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()[:3]
+                ).strip()
+                if summary:
+                    document["summary"] = summary[:300]
+            return document
+        except OSError:
+            continue
+    return {"source": "unknown", "last_cache_update": "unknown"}

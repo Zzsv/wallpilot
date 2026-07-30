@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from wallpilot.config import Settings
 from wallpilot.security import totp_code
 from wallpilot.storage import Store
@@ -90,3 +92,31 @@ def test_purge_removes_snapshot_but_keeps_audit(tmp_path: Path) -> None:
     assert store.get_recycle_item(item["id"]) is None
     assert any(row["event"] == "recycle.purged" for row in store.list_audit())
 
+
+def test_corrupt_database_stops_without_overwriting_data(tmp_path: Path) -> None:
+    settings = Settings(state_dir=tmp_path)
+    settings.ensure_directories()
+    original = b"not a sqlite database"
+    settings.database_path.write_bytes(original)
+    with pytest.raises(RuntimeError, match="停止启动"):
+        Store(settings)
+    assert settings.database_path.read_bytes() == original
+
+
+def test_recovery_code_is_returned_once_and_consumed_once(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    bootstrap = store.ensure_bootstrap()
+    codes = store.create_admin(
+        bootstrap["token"],
+        "Correct-Horse-42!",
+        totp_code(bootstrap["totp_secret"]),
+    )
+    assert len(codes) == 8
+    raw, _csrf = store.authenticate(
+        "Correct-Horse-42!", codes[0].lower(), "127.0.0.1"
+    )
+    store.logout(raw)
+    with pytest.raises(ValueError, match="错误"):
+        store.authenticate(
+            "Correct-Horse-42!", codes[0], "127.0.0.1"
+        )

@@ -93,6 +93,16 @@ class FirewalldDBus:
     def snapshot(self) -> dict[str, Any]:
         return self._run(self._snapshot_async)
 
+    async def _reload_async(self) -> None:
+        bus, main, _zone = await self._root_interfaces()
+        try:
+            await main.call_reload()
+        finally:
+            bus.disconnect()
+
+    def reload(self) -> None:
+        self._run(self._reload_async)
+
     @staticmethod
     def _tuple_settings(raw: Any) -> dict[str, Any]:
         if not isinstance(raw, list):
