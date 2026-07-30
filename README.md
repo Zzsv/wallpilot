@@ -4,12 +4,19 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+[简体中文](README.md) · [English](README.en.md)
+
 WallPilot 是一个面向个人 Linux 服务器的防火墙与状态管理面板。它把常用的
 firewalld 和 UFW 操作整理成中文 Web 界面，同时把防误操作、自动回滚、删除
 恢复和权限隔离放在功能之前。
 
 > 当前版本是 `0.1.0`。请先在测试机或可通过云控制台恢复的服务器上验证，再用
 > 于生产环境。WallPilot 只管理本机防火墙，不会修改云安全组、路由器或负载均衡器。
+
+![WallPilot 控制台预览，使用示例数据](docs/assets/dashboard.png)
+
+> 控制台真实界面预览。为了避免公开服务器信息，图中的主机名、地址和运行指标均为
+> 明确标记的示例数据。
 
 ## 核心能力
 
@@ -194,6 +201,14 @@ wallpilot serve
   真实集成验收。
 - 公网直连不是默认部署方式。如确需公网访问，必须在可信反向代理后启用HTTPS，
   设置 `WALLPILOT_COOKIE_SECURE=1` 和精确的 `WALLPILOT_ALLOWED_HOSTS`。
+
+## 参与项目
+
+- 使用 [Discussions](https://github.com/Zzsv/wallpilot/discussions) 提问、分享部署经验或讨论设计。
+- 使用 [Issue 表单](https://github.com/Zzsv/wallpilot/issues/new/choose) 报告可复现问题或提出功能建议。
+- 提交代码前请阅读 [贡献指南](CONTRIBUTING.md)。
+- 安全问题请遵循 [安全策略](SECURITY.md)，不要在公开 Issue 中披露漏洞细节。
+- 版本变化记录在 [CHANGELOG](CHANGELOG.md)。
 
 ## 许可
 

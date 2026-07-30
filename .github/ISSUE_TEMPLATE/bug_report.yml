@@ -1,0 +1,63 @@
+name: Bug report
+description: 报告可复现的 WallPilot 问题 / Report a reproducible problem
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的报告。请删除主机地址、随机管理路径、密钥、令牌和恢复码。
+        Thank you. Remove host addresses, management paths, keys, tokens, and recovery codes.
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Firewall backend
+      options:
+        - firewalld
+        - UFW
+        - nftables (read-only)
+        - iptables (read-only)
+        - Conflict or unknown
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Linux distribution and version
+      placeholder: Ubuntu 24.04, Rocky Linux 9.5, ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: WallPilot version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: 请提供最小复现步骤，不要粘贴秘密信息。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: 可粘贴经过检查和脱敏的 `wallpilot doctor --json` 输出。
+      render: json
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed secrets, public IP addresses, access paths, tokens, and recovery codes.
+          required: true
+        - label: This report does not contain vulnerability or exploit details.
+          required: true
