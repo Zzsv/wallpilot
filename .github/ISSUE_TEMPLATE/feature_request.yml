@@ -1,0 +1,45 @@
+name: Feature request
+description: 提议一个符合安全边界的新功能 / Propose a safety-aligned feature
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: 这个功能要解决什么实际运维问题？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: 描述用户流程，而不是任意 Shell 命令。
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Relevant backend
+      multiple: true
+      options:
+        - firewalld
+        - UFW
+        - nftables
+        - iptables
+        - Backend-independent
+  - type: textarea
+    id: risk
+    attributes:
+      label: Lockout and security considerations
+      description: 哪些连接可能受影响？如何预览、确认和回滚？
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Project scope
+      options:
+        - label: The proposal does not require arbitrary shell commands.
+          required: true
+        - label: The proposal does not control unrelated systemd services or cloud firewalls.
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and deployment ideas
+    url: https://github.com/Zzsv/wallpilot/discussions
+    about: 使用 Discussions 提问或分享部署经验。
+  - name: Security policy
+    url: https://github.com/Zzsv/wallpilot/security/policy
+    about: 不要在公开 Issue 中披露漏洞或秘密信息。
