@@ -74,16 +74,23 @@ See the complete [threat model](docs/threat-model.md).
 Run this on the Linux server:
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh | sudo sh
+curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Zzsv/wallpilot/v0.1.0/install-online.sh | sudo sh
 ```
+
+This entry point is pinned to `v0.1.0`. The installer downloads the matching
+GitHub Release source archive and verifies its published SHA-256 digest before
+extracting or running it.
 
 To inspect the installer before running it:
 
 ```bash
-curl -fsSLo wallpilot-install.sh https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh
+curl -fsSLo wallpilot-install.sh https://raw.githubusercontent.com/Zzsv/wallpilot/v0.1.0/install-online.sh
 less wallpilot-install.sh
 sudo sh wallpilot-install.sh
 ```
+
+Testing an unreleased commit requires both `WALLPILOT_REF` and its matching
+`WALLPILOT_ARCHIVE_SHA256`; the installer refuses an unverified override.
 
 Manual installation:
 
