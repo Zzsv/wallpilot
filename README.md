@@ -69,20 +69,21 @@ firewalld 和 UFW 操作整理成中文 Web 界面，同时把防误操作、自
 在采用 systemd 的 Linux 服务器上执行：
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh | sudo sh
+curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Zzsv/wallpilot/v0.1.0/install-online.sh | sudo sh
 ```
 
-安装脚本只从 `Zzsv/wallpilot` 下载源码，随后调用仓库内的
+该入口固定为 `v0.1.0`，安装器下载同版本的 GitHub Release 源码包，并在解压
+前强制核对随发布包生成的 SHA-256 摘要。随后才会调用仓库内的
 [`install.sh`](install.sh)。若希望先检查再运行：
 
 ```bash
-curl -fsSLo wallpilot-install.sh https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh
+curl -fsSLo wallpilot-install.sh https://raw.githubusercontent.com/Zzsv/wallpilot/v0.1.0/install-online.sh
 less wallpilot-install.sh
 sudo sh wallpilot-install.sh
 ```
 
-生产环境建议把 `WALLPILOT_REF` 固定到经过验证的版本标签或提交；如同时提供
-`WALLPILOT_ARCHIVE_SHA256`，在线安装器会在解压前强制校验安装包。
+需要测试尚未发布的提交时，可以同时传入 `WALLPILOT_REF` 和对应的
+`WALLPILOT_ARCHIVE_SHA256`；缺少摘要时安装器会拒绝继续。
 
 ### 手动安装
 

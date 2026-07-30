@@ -22,7 +22,8 @@ follows [Semantic Versioning](https://semver.org/).
 - Random management paths, Argon2id, CSRF protection, secure sessions, CSP,
   Host/Origin validation, and login rate limiting.
 - `wallpilot doctor` for read-only installation and exposure diagnostics.
-- One-command HTTPS bootstrap installer.
+- Version-pinned one-command HTTPS bootstrap installer with mandatory SHA-256
+  verification.
 - Python 3.10, 3.12, and 3.14 GitHub Actions test matrix.
 
 ### Security
