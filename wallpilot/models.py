@@ -4,11 +4,12 @@ import hashlib
 import ipaddress
 import json
 import re
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .compat import UTC, StrEnum
 
 
 class StrictModel(BaseModel):

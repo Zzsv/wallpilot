@@ -4,9 +4,10 @@ import socket
 import re
 import uuid
 import ipaddress
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
+from .compat import UTC
 from .config import Settings
 from .firewall import (
     FirewallAdapter,

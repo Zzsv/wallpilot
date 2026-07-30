@@ -9,9 +9,10 @@ import re
 import shutil
 import socket
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Iterable
 
+from .compat import UTC
 from .models import SystemMetrics, SystemProfile
 from .runner import CommandRunner
 

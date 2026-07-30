@@ -8,10 +8,11 @@ import secrets
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
+from .compat import UTC
 from .config import Settings
 from .security import (
     PasswordHasher,
