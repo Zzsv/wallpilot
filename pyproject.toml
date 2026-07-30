@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wallpilot"
+version = "0.1.0"
+description = "A safety-first web control plane for Linux host firewalls"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Zzsv" }]
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "pydantic>=2.7,<3",
+  "argon2-cffi>=23.1,<26",
+  "dbus-next>=0.2.3,<1; sys_platform == 'linux'",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Security",
+]
+
+[project.optional-dependencies]
+test = ["httpx>=0.27,<1", "pytest>=8,<10"]
+
+[project.scripts]
+wallpilot = "wallpilot.cli:main"
+wallpilot-agent = "wallpilot.agent:main"
+
+[tool.setuptools.packages.find]
+include = ["wallpilot*"]
+
+[tool.setuptools.package-data]
+wallpilot = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

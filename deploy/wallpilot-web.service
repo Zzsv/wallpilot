@@ -1,0 +1,37 @@
+[Unit]
+Description=WallPilot web interface
+Documentation=https://github.com/Zzsv/wallpilot
+After=network.target wallpilot-agent.service
+Requires=wallpilot-agent.service
+
+[Service]
+Type=simple
+User=wallpilot
+Group=wallpilot
+Environment=WALLPILOT_STATE_DIR=/var/lib/wallpilot
+Environment=WALLPILOT_AGENT_SOCKET=/run/wallpilot/agent.sock
+Environment=WALLPILOT_HOST=127.0.0.1
+Environment=WALLPILOT_PORT=8787
+ExecStart=/opt/wallpilot/venv/bin/wallpilot serve
+ExecStopPost=-/opt/wallpilot/venv/bin/wallpilot emergency-rollback
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/wallpilot
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

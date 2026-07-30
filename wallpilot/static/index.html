@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="wallpilot-base" content="__WALLPILOT_BASE__">
+  <title>WallPilot · Linux 防火墙控制台</title>
+  <link rel="stylesheet" href="__WALLPILOT_BASE__/static/styles.css">
+</head>
+<body>
+  <div class="backdrop"></div>
+  <header class="topbar">
+    <a class="brand" href="#dashboard" aria-label="WallPilot 首页">
+      <span class="brand-mark">W</span>
+      <span><strong>WallPilot</strong><small>Linux firewall control plane</small></span>
+    </a>
+    <div class="top-actions">
+      <span id="connectionState" class="status-pill muted">正在连接</span>
+      <button id="refreshButton" class="icon-button" title="刷新">↻</button>
+      <button id="logoutButton" class="ghost hidden">退出</button>
+    </div>
+  </header>
+
+  <div id="authView" class="auth-shell">
+    <section class="auth-card">
+      <div class="eyebrow">SAFETY FIRST</div>
+      <h1>把复杂规则变成<br><span>看得懂的安全决策</span></h1>
+      <p id="authDescription">正在检查初始化状态……</p>
+      <form id="setupForm" class="stack hidden">
+        <label>本机引导令牌<input name="token" autocomplete="off" required></label>
+        <label>管理员密码<input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+        <label>身份验证器动态码<input name="totp" inputmode="numeric" autocomplete="one-time-code" required></label>
+        <button class="primary" type="submit">完成安全初始化</button>
+      </form>
+      <form id="loginForm" class="stack hidden">
+        <label>管理员密码<input name="password" type="password" autocomplete="current-password" required></label>
+        <label>动态验证码<input name="totp" inputmode="numeric" autocomplete="one-time-code" required></label>
+        <button class="primary" type="submit">进入控制台</button>
+      </form>
+      <p id="authError" class="error"></p>
+    </section>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <nav>
+        <a href="#dashboard" class="active"><span>◫</span> 总览</a>
+        <a href="#firewall"><span>◈</span> 防火墙</a>
+        <a href="#rules"><span>≡</span> 规则</a>
+        <a href="#recycle"><span>♲</span> 回收站</a>
+        <a href="#audit"><span>◎</span> 审计记录</a>
+      </nav>
+      <div class="sidebar-note">
+        <strong>安全连接</strong>
+        <span>仅本机监听 · SSH 隧道</span>
+      </div>
+    </aside>
+
+    <main>
+      <section id="dashboard" class="page active">
+        <div class="page-heading">
+          <div><span class="eyebrow">SERVER OVERVIEW</span><h2 id="hostTitle">服务器总览</h2></div>
+          <span id="lastRefresh" class="muted"></span>
+        </div>
+        <div id="alertList" class="alert-list"></div>
+        <div class="metric-grid">
+          <article class="metric"><span>防火墙</span><strong id="firewallMetric">—</strong><small id="backendMetric">检测中</small></article>
+          <article class="metric"><span>系统负载</span><strong id="loadMetric">—</strong><small>1 / 5 / 15 分钟</small></article>
+          <article class="metric"><span>可用内存</span><strong id="memoryMetric">—</strong><small id="memoryDetail">—</small></article>
+          <article class="metric"><span>运行时间</span><strong id="uptimeMetric">—</strong><small id="kernelMetric">—</small></article>
+        </div>
+        <div class="two-column">
+          <article class="panel">
+            <header><div><span class="eyebrow">EXPOSURE</span><h3>监听端口</h3></div><span id="listenerCount" class="count">0</span></header>
+            <div id="listenerTable" class="table-wrap"></div>
+          </article>
+          <article class="panel">
+            <header><div><span class="eyebrow">SYSTEM</span><h3>关键服务</h3></div></header>
+            <div id="serviceList" class="service-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="firewall" class="page">
+        <div class="page-heading">
+          <div><span class="eyebrow">LIFECYCLE</span><h2>防火墙服务</h2></div>
+          <span id="firewallBadge" class="status-pill">—</span>
+        </div>
+        <article class="panel hero-panel">
+          <div>
+            <span class="eyebrow">ACTIVE BACKEND</span>
+            <h3 id="backendName">—</h3>
+            <p id="backendMessage" class="muted">正在检测系统防火墙……</p>
+          </div>
+          <div class="action-grid">
+            <button data-service-action="start" class="primary">开启</button>
+            <button data-service-action="reload">重新加载</button>
+            <button data-service-action="restart">重启</button>
+            <button data-service-action="enable">开机启用</button>
+            <button data-service-action="stop" class="danger-outline">关闭</button>
+            <button data-service-action="disable" class="danger-outline">取消开机启用</button>
+          </div>
+        </article>
+        <article class="panel">
+          <header><div><span class="eyebrow">CAPABILITIES</span><h3>后端能力</h3></div></header>
+          <div id="capabilityList" class="tag-list"></div>
+        </article>
+      </section>
+
+      <section id="rules" class="page">
+        <div class="page-heading">
+          <div><span class="eyebrow">RULES</span><h2>规则管理</h2></div>
+          <button id="openRuleForm" class="primary">＋ 新建规则</button>
+        </div>
+        <article id="ruleFormPanel" class="panel hidden">
+          <header><div><span class="eyebrow">GUIDED RULE</span><h3>小白规则向导</h3></div></header>
+          <form id="ruleForm" class="rule-form">
+            <label>动作<select name="action"><option value="allow">允许</option><option value="deny">阻止</option><option value="reject">拒绝</option><option value="limit">限速</option></select></label>
+            <label>端口<input name="port" placeholder="例如 443 或 8000-8100" required></label>
+            <label>协议<select name="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+            <label>来源网段<input name="source" placeholder="留空代表任意来源"></label>
+            <label>区域<input name="zone" placeholder="留空使用默认区域"></label>
+            <label class="wide">备注<input name="comment" placeholder="为什么需要这条规则"></label>
+            <div class="form-actions wide"><button type="button" id="cancelRuleForm" class="ghost">取消</button><button type="submit" class="primary">预览并应用</button></div>
+          </form>
+        </article>
+        <article class="panel">
+          <header><div><span class="eyebrow">ACTIVE CONFIG</span><h3>当前规则</h3></div><input id="ruleSearch" class="search" placeholder="搜索端口、服务或来源"></header>
+          <div id="rulesTable" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="recycle" class="page">
+        <div class="page-heading">
+          <div><span class="eyebrow">RECOVERABLE DELETES</span><h2>规则回收站</h2></div>
+        </div>
+        <article class="panel">
+          <p class="panel-intro">删除前的完整配置保存在本机。恢复仍会经过预览、二次确认和90秒安全确认。</p>
+          <div id="recycleTable" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="audit" class="page">
+        <div class="page-heading">
+          <div><span class="eyebrow">IMMUTABLE HISTORY</span><h2>审计记录</h2></div>
+          <button id="exportButton">导出诊断快照</button>
+        </div>
+        <article class="panel"><div id="auditTable" class="table-wrap"></div></article>
+      </section>
+    </main>
+  </div>
+
+  <div id="applyBanner" class="apply-banner hidden">
+    <div><strong>变更正在试运行</strong><span id="applyCountdown">90 秒后自动回滚</span></div>
+    <button id="rollbackApply" class="ghost">立即回滚</button>
+    <button id="confirmApply" class="primary">连接正常，保留变更</button>
+  </div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="__WALLPILOT_BASE__/static/app.js" defer></script>
+</body>
+</html>
+
