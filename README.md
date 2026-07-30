@@ -1,5 +1,9 @@
 # WallPilot
 
+[![Tests](https://github.com/Zzsv/wallpilot/actions/workflows/tests.yml/badge.svg)](https://github.com/Zzsv/wallpilot/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 WallPilot 是一个面向个人 Linux 服务器的防火墙与状态管理面板。它把常用的
 firewalld 和 UFW 操作整理成中文 Web 界面，同时把防误操作、自动回滚、删除
 恢复和权限隔离放在功能之前。
@@ -53,8 +57,30 @@ firewalld 和 UFW 操作整理成中文 Web 界面，同时把防误操作、自
 - firewalld 或 UFW；nftables/iptables 可只读使用
 - root 权限仅用于安装和运行受限代理
 
+### 一键安装
+
+在采用 systemd 的 Linux 服务器上执行：
+
 ```bash
-git clone <你的 WallPilot 仓库地址>
+curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh | sudo sh
+```
+
+安装脚本只从 `Zzsv/wallpilot` 下载源码，随后调用仓库内的
+[`install.sh`](install.sh)。若希望先检查再运行：
+
+```bash
+curl -fsSLo wallpilot-install.sh https://raw.githubusercontent.com/Zzsv/wallpilot/main/install-online.sh
+less wallpilot-install.sh
+sudo sh wallpilot-install.sh
+```
+
+生产环境建议把 `WALLPILOT_REF` 固定到经过验证的版本标签或提交；如同时提供
+`WALLPILOT_ARCHIVE_SHA256`，在线安装器会在解压前强制校验安装包。
+
+### 手动安装
+
+```bash
+git clone https://github.com/Zzsv/wallpilot.git
 cd wallpilot
 sudo ./install.sh
 ```
